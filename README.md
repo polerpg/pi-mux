@@ -20,11 +20,17 @@ Requires tmux 3.0+ and pi ≥ 0.74.0. Run Pi inside any `tmux` session. Outside 
 
 Pick a session and jump to it. Whatever you were in stays alive in the background. (Unlike `/resume`, which closes it.)
 
-A spinner marks sessions currently working.
+- Press **Tab** to toggle between **Current Folder** and **All** sessions (across folders).
+- A spinner marks sessions currently working.
+- If you switch to a session from another folder, pi-mux starts it in that session's saved `cwd`.
 
 ### `/new`
 
 Start a fresh session without closing the one you're in.
+
+### `/mux-new <path>`
+
+Start a fresh session in a different working directory (equivalent to `/new`, but for another folder).
 
 ### `/fork`
 
