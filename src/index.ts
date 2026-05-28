@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
+import { statSync, writeFileSync } from "node:fs";
+import { resolve as resolvePath } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import {
@@ -350,11 +351,13 @@ export default function (pi: ExtensionAPI) {
       const currentFile = ctx.sessionManager.getSessionFile();
 
       const self = process.env.TMUX_PANE!;
+      const owner = resolveOwner(self);
+
       const queryBusyPaths = (): Set<string> =>
         new Set(
           heartbeat
             .listActive()
-            .filter((e) => e.cwd === cwd && e.busy)
+            .filter((e) => e.owner === owner && e.busy)
             .map((e) => e.sessionFile),
         );
 
@@ -392,17 +395,65 @@ export default function (pi: ExtensionAPI) {
 
       const live = heartbeat.listActive();
       const liveEntry = live.find(
-        (e) => e.cwd === cwd && e.sessionFile === picked && e.paneId !== self,
+        (e) => e.owner === owner && e.sessionFile === picked && e.paneId !== self,
       );
       if (liveEntry) {
         execFileSync("tmux", ["swap-pane", "-s", liveEntry.paneId, "-t", self]);
         return;
       }
-      spawnAndSwap(
-        `pi -e ${SELF} --session ${picked}`,
-        cwd,
-        resolveOwner(self),
+
+      let pickedCwd = cwd;
+      try {
+        pickedCwd = SessionManager.open(picked).getHeader()?.cwd ?? cwd;
+      } catch {}
+
+      spawnAndSwap(`pi -e ${SELF} --session ${picked}`, pickedCwd, owner);
+    },
+  });
+
+  pi.registerCommand("mux-new", {
+    description: "Start a fresh pi session in a different working directory (pi-mux)",
+    handler: async (args, ctx) => {
+      if (!inTmux()) {
+        ctx.ui.notify("not in tmux", "error");
+        return;
+      }
+
+      const raw = (args ?? "").trim();
+      if (!raw) {
+        ctx.ui.notify("usage: /mux-new <path>", "info");
+        return;
+      }
+
+      const expanded = raw.replace(
+        /^~(?=$|\/)/,
+        process.env.HOME || process.env.USERPROFILE || "~",
       );
+      const targetCwd = resolvePath(ctx.cwd, expanded);
+
+      try {
+        if (!statSync(targetCwd).isDirectory()) {
+          ctx.ui.notify(`not a directory: ${targetCwd}`, "error");
+          return;
+        }
+      } catch {
+        ctx.ui.notify(`no such directory: ${targetCwd}`, "error");
+        return;
+      }
+
+      const self = process.env.TMUX_PANE!;
+      const owner = resolveOwner(self);
+
+      const sm = SessionManager.create(targetCwd);
+      const parentSession = ctx.sessionManager.getSessionFile();
+      sm.newSession({ parentSession: parentSession ?? undefined });
+      const newPath = sm.getSessionFile();
+      if (!newPath) {
+        ctx.ui.notify("failed to create session", "error");
+        return;
+      }
+
+      spawnAndSwap(`pi -e ${SELF} --session ${newPath}`, targetCwd, owner);
     },
   });
 
