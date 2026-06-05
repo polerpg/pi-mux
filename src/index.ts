@@ -50,6 +50,15 @@ function signalReady(): void {
   } catch {}
 }
 
+function ensureSessionHeaderWritten(sm: SessionManager): void {
+  const path = sm.getSessionFile();
+  const header = sm.getHeader();
+  if (!path || !header) return;
+  try {
+    writeFileSync(path, `${JSON.stringify(header)}\n`, { flag: "wx" });
+  } catch {}
+}
+
 function computeLabel(sm: SessionManagerLike): string | undefined {
   const name = sm.getSessionName();
   if (name && name.trim()) return name.trim();
@@ -291,6 +300,7 @@ export default function (pi: ExtensionAPI) {
     sm.newSession({ parentSession: ctx.sessionManager.getSessionFile() });
     const newPath = sm.getSessionFile();
     if (!newPath) return;
+    ensureSessionHeaderWritten(sm);
     spawnAndSwap(`pi -e ${SELF} --session ${newPath}`, ctx.cwd, owner);
     return { cancel: true };
   });
@@ -412,7 +422,7 @@ export default function (pi: ExtensionAPI) {
   });
 
   pi.registerCommand("mux-new", {
-    description: "Start a fresh pi session in a different working directory (pi-mux)",
+    description: "Start a fresh pi session (pi-mux), optionally in a different working directory",
     handler: async (args, ctx) => {
       if (!inTmux()) {
         ctx.ui.notify("not in tmux", "error");
@@ -420,16 +430,13 @@ export default function (pi: ExtensionAPI) {
       }
 
       const raw = (args ?? "").trim();
-      if (!raw) {
-        ctx.ui.notify("usage: /mux-new <path>", "info");
-        return;
-      }
-
-      const expanded = raw.replace(
-        /^~(?=$|\/)/,
-        process.env.HOME || process.env.USERPROFILE || "~",
-      );
-      const targetCwd = resolvePath(ctx.cwd, expanded);
+      const expanded = raw
+        ? raw.replace(
+            /^~(?=$|\/)/,
+            process.env.HOME || process.env.USERPROFILE || "~",
+          )
+        : "";
+      const targetCwd = raw ? resolvePath(ctx.cwd, expanded) : ctx.cwd;
 
       try {
         if (!statSync(targetCwd).isDirectory()) {
@@ -452,6 +459,7 @@ export default function (pi: ExtensionAPI) {
         ctx.ui.notify("failed to create session", "error");
         return;
       }
+      ensureSessionHeaderWritten(sm);
 
       spawnAndSwap(`pi -e ${SELF} --session ${newPath}`, targetCwd, owner);
     },
