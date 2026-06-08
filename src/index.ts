@@ -297,7 +297,7 @@ export default function (pi: ExtensionAPI) {
       ctx.cwd,
       ctx.sessionManager.getSessionDir(),
     );
-    sm.newSession({ parentSession: ctx.sessionManager.getSessionFile() });
+    sm.newSession();
     const newPath = sm.getSessionFile();
     if (!newPath) return;
     ensureSessionHeaderWritten(sm);
@@ -423,6 +423,49 @@ export default function (pi: ExtensionAPI) {
 
   pi.registerCommand("mux-new", {
     description: "Start a fresh pi session (pi-mux), optionally in a different working directory",
+    handler: async (args, ctx) => {
+      if (!inTmux()) {
+        ctx.ui.notify("not in tmux", "error");
+        return;
+      }
+
+      const raw = (args ?? "").trim();
+      const expanded = raw
+        ? raw.replace(
+            /^~(?=$|\/)/,
+            process.env.HOME || process.env.USERPROFILE || "~",
+          )
+        : "";
+      const targetCwd = raw ? resolvePath(ctx.cwd, expanded) : ctx.cwd;
+
+      try {
+        if (!statSync(targetCwd).isDirectory()) {
+          ctx.ui.notify(`not a directory: ${targetCwd}`, "error");
+          return;
+        }
+      } catch {
+        ctx.ui.notify(`no such directory: ${targetCwd}`, "error");
+        return;
+      }
+
+      const self = process.env.TMUX_PANE!;
+      const owner = resolveOwner(self);
+
+      const sm = SessionManager.create(targetCwd);
+      sm.newSession();
+      const newPath = sm.getSessionFile();
+      if (!newPath) {
+        ctx.ui.notify("failed to create session", "error");
+        return;
+      }
+      ensureSessionHeaderWritten(sm);
+
+      spawnAndSwap(`pi -e ${SELF} --session ${newPath}`, targetCwd, owner);
+    },
+  });
+
+  pi.registerCommand("sub", {
+    description: "Fork a sub-agent session with parentId, optionally in a different working directory",
     handler: async (args, ctx) => {
       if (!inTmux()) {
         ctx.ui.notify("not in tmux", "error");
