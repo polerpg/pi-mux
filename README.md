@@ -24,11 +24,15 @@ Pick a session and jump to it. Whatever you were in stays alive in the backgroun
 
 ### `/new`
 
-Start a fresh session without closing the one you're in.
+Start a fresh root-level session without closing the one you're in.
 
-### `/mux-new <path>`
+### `/mux-new [path]`
 
-Start a fresh session in a different working directory (equivalent to `/new`, but for another folder).
+Start a fresh root-level session. With a path, start it in a different working directory; with no path, use the current one.
+
+### `/sub [path]`
+
+Start a child/sub-agent session. With a path, start it in a different working directory; with no path, use the current one.
 
 ### `/fork`
 
@@ -51,7 +55,7 @@ Print whether pi-mux is active in the current Pi session.
 
 ## How it works
 
-pi-mux keeps one extra tmux session, `_pi-mux`, holding backgrounded Pis as detached windows. Spawning (`/new`, `/fork`, `/switch` to a non-live session) creates a detached window in the pool, starts Pi there, and swaps its pane into your visible pane. The Pi you just left is now in the pool, still running.
+pi-mux keeps one extra tmux session, `_pi-mux`, holding backgrounded Pis as detached windows. Spawning (`/new`, `/mux-new`, `/sub`, `/fork`, or `/switch` to a non-live session) creates a detached window in the pool, starts Pi there, and swaps its pane into your visible pane. The Pi you just left is now in the pool, still running.
 
 ```
 tmux
